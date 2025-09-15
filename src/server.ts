@@ -5,6 +5,7 @@ import {
   workerMessageSchema,
   WorkerMessageType,
   WorkerMessageReplyType,
+  workerMessageReplySchema,
 } from './server.schema';
 
 interface CreateServerConfig {
@@ -43,6 +44,21 @@ export async function createServer(config: CreateServerConfig) {
       };
 
       worker.send(JSON.stringify(payload));
+
+      worker.on('message', async (workerReply: string) => {
+        const reply = await workerMessageReplySchema.parseAsync(
+          JSON.parse(workerReply)
+        );
+        if (reply.errorCode) {
+          res.writeHead(parseInt(reply.errorCode));
+          res.end(reply.error);
+          return;
+        } else {
+          res.writeHead(200);
+          res.end(reply.data);
+          return;
+        }
+      });
     });
 
     server.listen(config.port, function () {
@@ -72,6 +88,8 @@ export async function createServer(config: CreateServerConfig) {
       }
 
       const upstreamID = rule?.upstreams[0];
+      const upstream = config.server.upstreams.find(e => e.id === upstreamID);
+
       if (!upstreamID) {
         const reply: WorkerMessageReplyType = {
           errorCode: '500',
@@ -80,6 +98,26 @@ export async function createServer(config: CreateServerConfig) {
 
         if (process.send) process.send(JSON.stringify(reply));
       }
+
+      const request = http.request(
+        { host: upstream?.url, path: requestUrl, method: 'GET' },
+        proxyRes => {
+          let body = '';
+
+          proxyRes.on('data', chunk => {
+            body += chunk;
+          });
+
+          proxyRes.on('end', () => {
+            const reply: WorkerMessageReplyType = {
+              data: body,
+            };
+
+            if (process.send) return process.send(JSON.stringify(reply));
+          });
+        }
+      );
+      request.end();
     });
   }
 }

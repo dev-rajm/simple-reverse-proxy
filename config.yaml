@@ -4,7 +4,7 @@ server:
 
   upstreams:
     - id: node1
-      url: http://localhost:8001
+      url: jsonplaceholder.typicode.com
 
     - id: node2
       url: http://localhost:8002
@@ -23,5 +23,9 @@ server:
         - node2
 
     - path: /admin
+      upstreams:
+        - node1
+
+    - path: /todos
       upstreams:
         - node1
